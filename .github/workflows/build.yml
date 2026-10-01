@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Windows & macOS
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,11 +31,50 @@ jobs:
             Remove-Item -Force 'ffmpeg.zip'
           }
 
-      - name: Build EXE with PyInstaller
+      - name: Build EXE
         run: pyinstaller --noconfirm --onefile --windowed --name "HEVCConverter" --add-binary "bin\ffmpeg.exe;bin" hevc_converter.py
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HEVCConverter-exe
+          name: HEVCConverter-Windows
           path: dist/HEVCConverter.exe
+
+  macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-14    # Apple Silicon (M1/M2/M3) arm64
+            arch: arm64
+            ffmpeg_url: https://github.com/eugeneware/ffmpeg-static/releases/latest/download/darwin-arm64
+          - os: macos-13    # Intel x64
+            arch: x64
+            ffmpeg_url: https://github.com/eugeneware/ffmpeg-static/releases/latest/download/darwin-x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download ffmpeg (built-in)
+        run: |
+          mkdir -p bin
+          if [ ! -f bin/ffmpeg ]; then
+            curl -L --fail -o bin/ffmpeg "${{ matrix.ffmpeg_url }}"
+            chmod +x bin/ffmpeg
+          fi
+
+      - name: Build .app
+        run: pyinstaller --noconfirm --windowed --name "HEVCConverter" --add-binary "bin/ffmpeg:bin" hevc_converter.py
+
+      - name: Upload .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HEVCConverter-macOS-${{ matrix.arch }}
+          path: dist/HEVCConverter.app
